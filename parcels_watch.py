@@ -41,9 +41,7 @@ def watch():
 
 def get_second_number(attributes):
     for i in attributes:
-        if i[0] == 'Дополнительные номера отслеживания':
-            return i[1]
-        if i[0] == 'Додаткові номери':
+        if 'Дополнительные номера отслеживания' in i[0]:
             return i[1]
 
 

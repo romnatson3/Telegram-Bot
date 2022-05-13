@@ -4,6 +4,7 @@ from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
+from selenium.common.exceptions import TimeoutException
 import io
 from time import sleep
 import sqlite3
@@ -13,6 +14,7 @@ from logger import logger
 from settings import SELENIUM_RUN_TYPE
 import os
 from datetime import datetime
+from bs4 import BeautifulSoup
 
 
 class Parcels():
@@ -20,6 +22,7 @@ class Parcels():
         self.parcel_id = parcel_id
         self.selenium_run_type = selenium_run_type
         self.session_id = self._open_selenium_session()
+        self.not_found = False
 
     def _open_selenium_session(self):
         if self.selenium_run_type == 'remote':
@@ -31,7 +34,7 @@ class Parcels():
                 'ftpProxy': proxy,
                 'sslProxy': proxy
                 }
-            self.driver = webdriver.Remote(command_executor='http://10.8.0.2:4444/wd/hub', desired_capabilities=cap)
+            self.driver = webdriver.Remote(command_executor='http://10.8.0.14:4444/wd/hub', desired_capabilities=cap)
         elif self.selenium_run_type == 'local':
             chrome_options = webdriver.ChromeOptions()
             chrome_options.add_argument('--headless')
@@ -42,7 +45,6 @@ class Parcels():
                 "Page.addScriptToEvaluateOnNewDocument",
                 {
                     "source": """
-
                         Object.defineProperty(window, 'navigator', {
                             value: new Proxy(navigator, {
                             has: (target, key) => (key === 'webdriver' ? false : key in target),
@@ -61,9 +63,18 @@ class Parcels():
         return self.driver.session_id
 
     def get_page_source(self):
-        URL = 'https://parcelsapp.com/tracking/'
+        URL = 'https://1track.ru/tracking/'
         self.driver.get('{}{}'.format(URL, self.parcel_id))
-        WebDriverWait(self.driver, 60).until(EC.presence_of_all_elements_located((By.XPATH, "//section[@class='tracking-info']")))
+        try:
+            WebDriverWait(self.driver, 30).until(EC.presence_of_all_elements_located((By.XPATH, "//section[@class='list-stages shadow show_nogroups']")))
+        except TimeoutException as e:
+            logger.info(f'not found {self.parcel_id}')
+            self.not_found = True
+        try:
+            btn = self.driver.find_element_by_xpath("//div[@class='row btn-more']//div//a[@class='btn btn-second']")
+            btn.click()
+        except:
+            pass
         self.content = self.driver.page_source
         self.driver.quit()
         if self.selenium_run_type == 'local':
@@ -72,19 +83,20 @@ class Parcels():
 
     @property
     def event_list(self):
+        if self.not_found:
+            return [(datetime.now().strftime('%d.%m.%Y %H:%M'),'not found or wrong parcel id')]
+        html = BeautifulSoup(self.content)
         event_list = []
-        for i in self.content.split('\n\n'):
-            regex = re.compile(r'<strong>(.*)</strong>[\s\S]*<span>(.*)</span>[\s\S]*<strong>(.*)</strong>[\s\S]*</div>\n\s*([\w\s]*)\n\s*</div>')
-            result = regex.findall(i)
-            if result:
-                event_list.append(result[0])
-        event_list = list(map(lambda x:('{} {}, {}'.format(x[0],x[1], x[-1]), *x[2:-1]) ,event_list))
-        event_list.reverse()
-        if not event_list:
-            regex = re.compile(r'<div class="event-time">[\s\S]*<strong>(.*)</strong>[\s\S]*<strong>(.*)</strong>')
-            result = regex.findall(self.content)
-            if result:
-                event_list = result
+        section = html.find('section', class_='list-stages shadow show_nogroups')
+        for i in section.find_all('div', class_='stage'):
+            try:
+                date = i.find(class_='date').text
+                day = i.find(class_='day').text
+                h4 = i.find('h4').text
+                text = i.find_all('p', class_='text')[1].text
+                event_list.append((f'{date}, {day}', f'{h4}, {text}'))
+            except:
+                pass
         return event_list
 
     @property
@@ -97,16 +109,13 @@ class Parcels():
 
     @property
     def parcel_attributes(self):
+        if self.not_found:
+            return [('attributes','')]
+        html = BeautifulSoup(self.content)
         parcel_attributes = []
-        regex = re.compile(r'<table class="parcel-attributes">[\s\S]+?<tbody>([\s\S]+?)</tbody>')
-        result = regex.search(self.content)
-        if result:
-            regex = re.compile('<td>(?P<name>.*)</td>[\s\S]+?<span>(?P<value>.*)</span>')
-            table = result.group(1)
-            for i in table.split('<tr>'):
-                row = regex.search(i)
-                if row:
-                    parcel_attributes.append((row.group('name'), row.group('value')))
+        for i in html.find_all('div', class_='row m-0 justify-content-between flex-nowrap'):
+            p = i.find_all('p')
+            parcel_attributes.append((p[0].text,p[1].text))
         return parcel_attributes
 
     @property

@@ -18,6 +18,8 @@ import httplib2
 from settings import TOKEN, ALLOWED_ID, STATIC_FILE, KODI_PLAYLIST
 from multiprocessing import Process
 import shutil
+import requests
+from bs4 import BeautifulSoup
 
 
 class Dot(dict):
@@ -229,7 +231,7 @@ def film_serial(m, callback_data=None):
                                  text=f'<a href="{result[0][1]}">{title}</a>')
         return
 
-    regex_kinovod = re.compile('https://kinovod.(net|cc)/(film|serial)/[\w|-]+')
+    regex_kinovod = re.compile('http.?://kinovod.(net|cc)/(film|serial)/[\w|-]+')
     regex_kinotochka = re.compile('https://kinotochka.co/[\d|\w|-]+.html')
     regex_seasonvar = re.compile('http://seasonvar.ru/[\d|\w|-]+.html')
     kinovod_url = regex_kinovod.search(m.text)
@@ -284,12 +286,29 @@ def youtube(m):
          reply_markup=json.dumps(inline_keyboard_markup))
 
 
+def exchange_rates(ID):
+    response = requests.get('https://minfin.com.ua/ua/currency/drogobych/usd/')
+    html = BeautifulSoup(response.text)
+    head = html.find('h1', class_='bottom-head').text
+    table = html.find(class_='table-response mfm-table mfcur-table-lg mfcur-table-lg-currency-cur has-no-tfoot')
+    buy_td = table.findAll('td')[5]
+    buy_title = buy_td.attrs['data-title']
+    buy = re.search(r'\n([0-9,.]*)\n', buy_td.text).group(1)
+    buy_int = round(float(buy), 2)
+    selling_td = table.findAll('td')[6]
+    selling_title = selling_td.attrs['data-title']
+    selling = re.search(r'\n([0-9,.]*)\n', selling_td.text).group(1)
+    selling_int = round(float(selling), 2)
+    text = f'<b>{head}</b>\n{buy_title}: <b>{buy_int}</b>\n{selling_title}: <b>{selling_int}</b>'
+    send('sendMessage', chat_id=ID, parse_mode='HTML', text=text)
+
+
 pattern = dict(
         parcels = r'^[A-Za-z0-9]{13,17}',
         parcel_name = r'^name_[A-Za-z0-9]{13,17}',
         parcel_delete = r'^delete_[A-Za-z0-9]{13,17}',
         youtube = r'^(https://www\.youtube\.com/watch\?v=\S{11})|(https://youtu\.be/\S{11})',
-        kinovod = r'https://kinovod.(net|cc)/(film|serial)/[\w|-]+',
+        kinovod = r'http.?://kinovod.(net|cc)/(film|serial)/[\w|-]+',
         kinotochka = r'https://kinotochka.co/[\d|\w|-]+.html',
         seasonvar = r'http://seasonvar.ru/[\d|\w|-]+.html',
         convert_to_pdf = r'^convert_to_pdf$',
@@ -333,6 +352,10 @@ def webhook():
 
                 if m.text == '/second_track':
                     second_track(ID)
+                    return 'ok', 200
+
+                if m.text == '/exchange_rates':
+                    exchange_rates(ID)
                     return 'ok', 200
 
                 if m.text:

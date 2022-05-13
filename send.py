@@ -16,19 +16,11 @@ def get_boundary():
 
 
 def get_form_data(data, boundary):
-#    if isinstance(data['caption'], bytes):
-#        data['caption'] = data['caption'].decode('utf-8')
-
     form_data = BytesIO()
     form_data.write(bytes(f'--{boundary}\r\n', encoding='utf-8'))
     form_data.write(bytes(f'Content-Disposition: form-data; name="chat_id"\r\n\r\n', encoding='utf-8'))
     form_data.write(bytes(f'{data["chat_id"]}\r\n', encoding='utf-8'))
     form_data.write(bytes(f'--{boundary}\r\n', encoding='utf-8'))
-
-#    form_data.write(bytes(f'Content-Disposition: form-data; name="caption"\r\n\r\n', encoding='utf-8'))
-#    form_data.write(bytes(f'{data["caption"]}\r\n', encoding='utf-8'))
-#    form_data.write(bytes(f'--{boundary}\r\n', encoding='utf-8'))
-
     form_data.write(bytes(f'Content-Disposition: form-data; name="{data["type"]}"; filename="{data["caption"]}"\r\n\r\n', encoding='utf-8'))
     form_data.write(data['file'])
     form_data.write(bytes('\r\n', encoding='utf-8'))

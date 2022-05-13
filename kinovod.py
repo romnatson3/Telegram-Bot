@@ -1,4 +1,3 @@
-import codecs
 import json
 from selenium import webdriver
 import pychrome

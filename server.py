@@ -219,16 +219,11 @@ def film_serial(m, callback_data=None):
     video_type = None
 
     if callback_data:
-        v = recovery_object(m.From.id)
-        for season in v.list_serials_files:
-            if season['comment'] == callback_data:
-                for episode in season['playlist']:
-                    for i in episode['file'].split(','):
-                        result = re.findall(r'\[(\d+p)](http.+?)(?=\s|$)', i)
-                        if result:
-                            title =  f'{season["comment"]} | {episode["comment"]} ({result[0][0]})'
-                            send('sendMessage', chat_id=m.From.id, parse_mode='HTML',
-                                 text=f'<a href="{result[0][1]}">{title}</a>')
+        k = recovery_object(m.From.id)
+        video_url = list(filter(lambda x: callback_data in x[1], k.video_url))
+        for i in video_url:
+            send('sendMessage', chat_id=m.From.id, parse_mode='HTML',
+                 text=f'<a href="{i[0]}">{i[1]}</a>')
         return
 
     regex_kinovod = re.compile('http.?://kinovod.(net|cc)/(film|serial)/[\w|-]+')
@@ -239,29 +234,29 @@ def film_serial(m, callback_data=None):
     seasonvar_url = regex_seasonvar.search(m.text)
 
     if kinovod_url:
-        v = Kinovod(kinovod_url.group())
-        video_type = v.type
-        video_url = v.video_url
-        if v.list_serials_files:
+        k = Kinovod(kinovod_url.group())
+        video_type = k.type
+        video_url = k.video_url
+        if k.list_serials_files:
             l = []
-            for season in v.list_serials_files:
-                l.append([dict(text=season['comment'], callback_data=season['comment'])])
+            for season in k.list_serials_files:
+                l.append([dict(text=season, callback_data=season)])
             inline_keyboard_markup = {'inline_keyboard': l}
-            headers, content = send('sendMessage', chat_id=m.From.id, text=v.title,
+            headers, content = send('sendMessage', chat_id=m.From.id, text=k.title,
                                     reply_markup=json.dumps(inline_keyboard_markup))
-            save_object(m.From.id, v)
+            save_object(m.From.id, k)
             kodi(video_url, video_type)
             return
 
     elif kinotochka_url:
-        v = Kinotochka(kinotochka_url.group())
+        k = Kinotochka(kinotochka_url.group())
         video_type = 'films'
-        video_url = v.video_url
+        video_url = k.video_url
 
     elif seasonvar_url:
-        v = Seasonvar(seasonvar_url.group())
+        k = Seasonvar(seasonvar_url.group())
         video_type = 'serials'
-        video_url = v.video_url
+        video_url = k.video_url
 
     if video_url:
         kodi(video_url, video_type)
@@ -330,7 +325,7 @@ def file(filename):
     return send_from_directory(STATIC_FILE, filename)
 
 
-@app.route('/telegram_webhook', methods=['POST'])
+@app.route('/telegram_bot_webhook', methods=['POST'])
 def webhook():
     global message_dict
     try:
